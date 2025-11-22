@@ -7,25 +7,37 @@ import java.io.*;
 @Service
 public class SalaryPredictionService {
 
-    public Map<String, Object> predictSalaryWithML(int experience, String jobTitle, String location,
-                                                   String educationLevel, List<String> skills) {
-
+    private String getModelsDirectory() {
         try {
-            // Try to use Python ML model first
-            Map<String, Object> mlResult = callPythonMLModel(experience, jobTitle, location, educationLevel, skills);
+            // Try multiple approaches to find the models directory
+            File devModelsDir = new File("src/main/resources/models");
+            if (devModelsDir.exists()) {
+                System.out.println("📁 Found models in: " + devModelsDir.getAbsolutePath());
+                return devModelsDir.getAbsolutePath();
+            }
 
-            if (mlResult != null && (boolean) mlResult.get("success")) {
-                System.out.println("🤖 Using actual ML model prediction");
-                return mlResult;
-            } else {
-                System.out.println("⚠️ ML model failed, using fallback logic");
-                return fallbackPrediction(experience, jobTitle, location, educationLevel, skills);
+            ClassLoader classLoader = getClass().getClassLoader();
+            java.net.URL resource = classLoader.getResource("models");
+            if (resource != null) {
+                String jarPath = new File(resource.toURI()).getAbsolutePath();
+                System.out.println("📁 Found models in JAR: " + jarPath);
+                return jarPath;
+            }
+
+            File currentDir = new File("models");
+            if (currentDir.exists()) {
+                System.out.println("📁 Found models in current directory: " + currentDir.getAbsolutePath());
+                return currentDir.getAbsolutePath();
             }
 
         } catch (Exception e) {
-            System.out.println("❌ ML integration error: " + e.getMessage());
-            return fallbackPrediction(experience, jobTitle, location, educationLevel, skills);
+            System.out.println("❌ Error finding models directory: " + e.getMessage());
         }
+
+        // Last resort
+        String fallbackPath = new File(".").getAbsolutePath();
+        System.out.println("⚠️ Using fallback path: " + fallbackPath);
+        return fallbackPath;
     }
 
     private Map<String, Object> callPythonMLModel(int experience, String jobTitle, String location,
@@ -41,150 +53,113 @@ public class SalaryPredictionService {
 
             String inputJson = new com.google.gson.Gson().toJson(inputData);
 
+            // Write JSON to a temporary file
+            File tempFile = File.createTempFile("salary_input", ".json");
+            try (FileWriter writer = new FileWriter(tempFile)) {
+                writer.write(inputJson);
+            }
+
+            System.out.println("📁 Created temp file: " + tempFile.getAbsolutePath());
+
             // Get the models directory path
             String modelsDir = getModelsDirectory();
             String pythonScript = modelsDir + "/ml_salary_predictor.py";
+
+            System.out.println("📁 Python script path: " + pythonScript);
 
             // Check if Python script exists
             File scriptFile = new File(pythonScript);
             if (!scriptFile.exists()) {
                 System.out.println("❌ Python script not found: " + pythonScript);
+                tempFile.delete();
                 return null;
             }
 
-            // Execute Python script
-            ProcessBuilder processBuilder = new ProcessBuilder(
-                    "python3", pythonScript, inputJson
-            );
-
+            // Create ProcessBuilder
+            ProcessBuilder processBuilder = new ProcessBuilder();
+            processBuilder.command("python", pythonScript, tempFile.getAbsolutePath());
+            processBuilder.directory(new File(modelsDir));
             processBuilder.redirectErrorStream(true);
+
+            System.out.println("🐍 Starting Python process...");
             Process process = processBuilder.start();
 
-            // Read output
+            // Read output and look for JSON line
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            StringBuilder output = new StringBuilder();
+            String jsonOutput = null;
             String line;
+
+            System.out.println("🐍 Python output:");
             while ((line = reader.readLine()) != null) {
-                output.append(line);
+                System.out.println("   " + line);
+                // Look for lines that start with { (JSON)
+                if (line.trim().startsWith("{")) {
+                    jsonOutput = line.trim();
+                    System.out.println("✅ Found JSON output: " + jsonOutput);
+                }
             }
 
+            // Wait for process to complete
             int exitCode = process.waitFor();
+            System.out.println("🐍 Python exit code: " + exitCode);
+
+            // Clean up temp file
+            tempFile.delete();
+
             if (exitCode != 0) {
                 System.out.println("❌ Python script failed with exit code: " + exitCode);
                 return null;
             }
 
-            // Parse JSON response
-            String jsonOutput = output.toString();
-            return new com.google.gson.Gson().fromJson(jsonOutput, Map.class);
+            if (jsonOutput == null) {
+                System.out.println("❌ No JSON found in Python output");
+                return null;
+            }
+
+            try {
+                Map<String, Object> result = new com.google.gson.Gson().fromJson(jsonOutput, Map.class);
+                System.out.println("✅ Successfully parsed Python response");
+                return result;
+            } catch (Exception e) {
+                System.out.println("❌ Failed to parse JSON: " + e.getMessage());
+                return null;
+            }
 
         } catch (Exception e) {
             System.out.println("❌ Error calling Python ML model: " + e.getMessage());
+            e.printStackTrace();
             return null;
         }
     }
 
-    private String getModelsDirectory() {
-        try {
-            // Get the directory where models are stored
-            ClassLoader classLoader = getClass().getClassLoader();
-            java.net.URL resource = classLoader.getResource("models");
-            if (resource != null) {
-                return new File(resource.toURI()).getAbsolutePath();
-            }
-        } catch (Exception e) {
-            System.out.println("❌ Error getting models directory: " + e.getMessage());
-        }
-
-        // Fallback to current directory
-        return new File(".").getAbsolutePath();
-    }
-
-    private Map<String, Object> fallbackPrediction(int experience, String jobTitle, String location,
+    public Map<String, Object> predictSalaryWithML(int experience, String jobTitle, String location,
                                                    String educationLevel, List<String> skills) {
-        // Your existing fallback logic
-        Map<String, Double> roleBaseSalaries = Map.of(
-                "Software Developer", 75000.0,
-                "Data Scientist", 90000.0,
-                "ML Engineer", 95000.0,
-                "DevOps Engineer", 85000.0,
-                "Frontend Developer", 70000.0,
-                "Backend Developer", 80000.0,
-                "Full Stack Developer", 78000.0
-        );
 
-        Map<String, Double> locationMultipliers = Map.of(
-                "United States", 1.0,
-                "New Zealand", 0.75,
-                "India", 0.25,
-                "United Kingdom", 0.85,
-                "Germany", 0.90,
-                "Canada", 0.80,
-                "Australia", 0.82
-        );
+        try {
+            // Use Python ML model
+            Map<String, Object> mlResult = callPythonMLModel(experience, jobTitle, location, educationLevel, skills);
 
-        Map<String, Double> educationMultipliers = Map.of(
-                "Bachelor", 1.0,
-                "Master", 1.15,
-                "PhD", 1.3
-        );
+            if (mlResult != null && mlResult.get("success") != null && (boolean) mlResult.get("success")) {
+                System.out.println("🤖 Using ML model prediction");
+                return mlResult;
+            } else {
+                System.out.println("❌ ML model failed - no fallback available");
+                // Return simple error response since we removed fallback logic
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("error", "Salary prediction service temporarily unavailable");
+                errorResponse.put("message", "Please try again later or contact support");
+                return errorResponse;
+            }
 
-        double skillsBonus = 1.0 + (skills.size() * 0.02);
-        double experienceMultiplier = 1.0 + (experience * 0.07) + (Math.pow(experience, 0.7) * 0.03);
-
-        double baseSalary = roleBaseSalaries.getOrDefault(jobTitle, 70000.0);
-        double locationMultiplier = locationMultipliers.getOrDefault(location, 0.8);
-        double educationMultiplier = educationMultipliers.getOrDefault(educationLevel, 1.0);
-
-        double predictedSalaryUSD = baseSalary * experienceMultiplier * locationMultiplier * educationMultiplier * skillsBonus;
-
-        Map<String, Object> result = convertToLocalCurrency(predictedSalaryUSD, location);
-
-        List<String> factors = new ArrayList<>();
-        factors.add(experience + " years of experience");
-        factors.add(jobTitle + " role");
-        factors.add(location + " location");
-        factors.add(educationLevel + " education level");
-        factors.add(skills.size() + " key skills");
-        factors.add("Fallback algorithm (ML model not available)");
-
-        result.put("factors", factors);
-        result.put("confidence", 75); // Lower confidence for fallback
-        result.put("model", "Fallback_Algorithm");
-
-        return result;
-    }
-
-    private Map<String, Object> convertToLocalCurrency(double salaryUSD, String location) {
-        Map<String, String> currencies = Map.of(
-                "United States", "USD",
-                "New Zealand", "NZD",
-                "India", "INR",
-                "United Kingdom", "GBP",
-                "Germany", "EUR",
-                "Canada", "CAD",
-                "Australia", "AUD"
-        );
-
-        Map<String, Double> exchangeRates = Map.of(
-                "USD", 1.0,
-                "NZD", 1.62,
-                "INR", 83.0,
-                "GBP", 0.79,
-                "EUR", 0.92,
-                "CAD", 1.35,
-                "AUD", 1.52
-        );
-
-        String currency = currencies.getOrDefault(location, "USD");
-        double exchangeRate = exchangeRates.getOrDefault(currency, 1.0);
-        double localSalary = salaryUSD * exchangeRate;
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("salary", (int) localSalary);
-        result.put("currency", currency);
-        result.put("salaryUSD", (int) salaryUSD);
-
-        return result;
+        } catch (Exception e) {
+            System.out.println("❌ ML integration error: " + e.getMessage());
+            // Return simple error response
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", "Salary prediction service error");
+            errorResponse.put("message", "Please try again later");
+            return errorResponse;
+        }
     }
 }

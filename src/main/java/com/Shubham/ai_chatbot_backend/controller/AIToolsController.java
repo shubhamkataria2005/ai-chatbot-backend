@@ -2,8 +2,12 @@ package com.Shubham.ai_chatbot_backend.controller;
 
 import com.Shubham.ai_chatbot_backend.service.UserService;
 import com.Shubham.ai_chatbot_backend.service.SalaryPredictionService;
+import com.Shubham.ai_chatbot_backend.service.WeatherPredictionService;
+import com.Shubham.ai_chatbot_backend.service.CarRecognitionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
 import java.util.*;
 import java.io.*;
 
@@ -17,6 +21,12 @@ public class AIToolsController {
 
     @Autowired
     private SalaryPredictionService salaryPredictionService;
+
+    @Autowired
+    private WeatherPredictionService weatherPredictionService;
+
+    @Autowired
+    private CarRecognitionService carRecognitionService;
 
     // Enhanced Salary Prediction Endpoint with ML
     @PostMapping("/salary-prediction")
@@ -92,19 +102,15 @@ public class AIToolsController {
             // Call Python ML model for sentiment analysis
             Map<String, Object> sentimentResult = callPythonSentimentModel(text);
 
-            if (sentimentResult != null && (boolean) sentimentResult.get("success")) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", true);
-                response.put("sentiment", sentimentResult.get("sentiment"));
-                response.put("confidence", sentimentResult.get("confidence"));
-                response.put("analysis", sentimentResult.get("analysis"));
-                response.put("textLength", sentimentResult.get("textLength"));
-                response.put("wordCount", sentimentResult.get("wordCount"));
-                response.put("model", sentimentResult.get("model"));
-                return response;
+            if (sentimentResult != null && sentimentResult.get("success") != null && (boolean) sentimentResult.get("success")) {
+                return sentimentResult;
             } else {
-                // Fallback to Java-based sentiment analysis
-                return fallbackSentimentAnalysis(text);
+                // Return error response if ML model fails
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("error", "Sentiment analysis service temporarily unavailable");
+                errorResponse.put("message", "Please try again later");
+                return errorResponse;
             }
 
         } catch (Exception e) {
@@ -116,6 +122,82 @@ public class AIToolsController {
         }
     }
 
+    // Weather Prediction Endpoint with ML
+    @PostMapping("/weather-prediction")
+    public Map<String, Object> predictWeather(
+            @RequestBody Map<String, Object> request,
+            @RequestHeader("Authorization") String sessionToken) {
+
+        // Check authentication
+        if (!userService.validateSession(sessionToken)) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Authentication required");
+            errorResponse.put("message", "Please login to use this feature");
+            return errorResponse;
+        }
+
+        try {
+            double temperature = ((Number) request.get("temperature")).doubleValue();
+            double humidity = ((Number) request.get("humidity")).doubleValue();
+            double windSpeed = ((Number) request.get("windSpeed")).doubleValue();
+            double pressure = ((Number) request.get("pressure")).doubleValue();
+            double rainfall = ((Number) request.get("rainfall")).doubleValue();
+
+            System.out.println("🌤️ Weather Prediction Request:");
+            System.out.println("   Temperature: " + temperature + "°C");
+            System.out.println("   Humidity: " + humidity + "%");
+            System.out.println("   Wind Speed: " + windSpeed + " km/h");
+            System.out.println("   Pressure: " + pressure + " hPa");
+            System.out.println("   Rainfall: " + rainfall + " mm");
+
+            // Use weather prediction service
+            Map<String, Object> prediction = weatherPredictionService.predictWeather(
+                    temperature, humidity, windSpeed, pressure, rainfall
+            );
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("predictedTemperature", prediction.get("predictedTemperature"));
+            response.put("predictedRainfall", prediction.get("predictedRainfall"));
+            response.put("weatherCondition", prediction.get("weatherCondition"));
+            response.put("confidence", prediction.get("confidence"));
+            response.put("factors", prediction.get("factors"));
+            response.put("model", prediction.get("model"));
+            response.put("location", "Auckland, NZ");
+
+            return response;
+
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", "Weather prediction failed");
+            errorResponse.put("message", e.getMessage());
+            return errorResponse;
+        }
+    }
+
+    @PostMapping("/car-recognition")
+    public Map<String, Object> recognizeCar(
+            @RequestParam("image") MultipartFile image,
+            @RequestHeader("Authorization") String sessionToken) {
+
+        // Check authentication
+        if (!userService.validateSession(sessionToken)) {
+            return Map.of("error", "Authentication required");
+        }
+
+        try {
+            System.out.println("🚗 Car Recognition Request");
+            return carRecognitionService.recognizeCar(image);
+
+        } catch (Exception e) {
+            return Map.of(
+                    "success", false,
+                    "error", "Car recognition failed"
+            );
+        }
+    }
+
     private Map<String, Object> callPythonSentimentModel(String text) {
         try {
             // Prepare input data
@@ -124,102 +206,85 @@ public class AIToolsController {
 
             String inputJson = new com.google.gson.Gson().toJson(inputData);
 
+            // Write JSON to a temporary file
+            File tempFile = File.createTempFile("sentiment_input", ".json");
+            try (FileWriter writer = new FileWriter(tempFile)) {
+                writer.write(inputJson);
+            }
+
+            System.out.println("📁 Created temp file: " + tempFile.getAbsolutePath());
+
             // Get models directory
             String modelsDir = getModelsDirectory();
             String pythonScript = modelsDir + "/sentiment_predictor.py";
+
+            System.out.println("📁 Python script path: " + pythonScript);
 
             // Check if Python script exists
             File scriptFile = new File(pythonScript);
             if (!scriptFile.exists()) {
                 System.out.println("❌ Python script not found: " + pythonScript);
+                tempFile.delete();
                 return null;
             }
 
-            // Execute Python script
-            ProcessBuilder processBuilder = new ProcessBuilder(
-                    "python", pythonScript, inputJson
-            );
-
+            // Execute Python script with file input
+            ProcessBuilder processBuilder = new ProcessBuilder();
+            processBuilder.command("python", pythonScript, tempFile.getAbsolutePath());
+            processBuilder.directory(new File(modelsDir));
             processBuilder.redirectErrorStream(true);
+
+            System.out.println("🐍 Starting Python sentiment process...");
             Process process = processBuilder.start();
 
-            // Read output
+            // Read output and look for JSON line
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            StringBuilder output = new StringBuilder();
+            String jsonOutput = null;
             String line;
+
+            System.out.println("🐍 Python output:");
             while ((line = reader.readLine()) != null) {
-                output.append(line);
+                System.out.println("   " + line);
+                // Look for lines that start with { (JSON)
+                if (line.trim().startsWith("{")) {
+                    jsonOutput = line.trim();
+                    System.out.println("✅ Found sentiment JSON output: " + jsonOutput);
+                }
             }
 
             int exitCode = process.waitFor();
+            System.out.println("🐍 Python exit code: " + exitCode);
+
+            // Clean up temp file
+            tempFile.delete();
+
             if (exitCode != 0) {
-                System.out.println("❌ Python script failed with exit code: " + exitCode);
+                System.out.println("❌ Python sentiment script failed with exit code: " + exitCode);
                 return null;
             }
 
-            // Parse JSON response
-            String jsonOutput = output.toString();
-            return new com.google.gson.Gson().fromJson(jsonOutput, Map.class);
+            if (jsonOutput == null) {
+                System.out.println("❌ No JSON found in sentiment Python output");
+                return null;
+            }
+
+            try {
+                Map<String, Object> result = new com.google.gson.Gson().fromJson(jsonOutput, Map.class);
+                System.out.println("✅ Successfully parsed sentiment Python response");
+                return result;
+            } catch (Exception e) {
+                System.out.println("❌ Failed to parse JSON from Python: " + e.getMessage());
+                System.out.println("🐍 Raw output was: " + jsonOutput);
+                return null;
+            }
 
         } catch (Exception e) {
             System.out.println("❌ Error calling Python sentiment model: " + e.getMessage());
+            e.printStackTrace();
             return null;
         }
     }
 
-    private Map<String, Object> fallbackSentimentAnalysis(String text) {
-        // Simple fallback sentiment analysis
-        String lowerText = text.toLowerCase();
-
-        String[] positiveWords = {"good", "great", "excellent", "amazing", "wonderful", "happy", "love", "like", "awesome", "fantastic", "best", "perfect"};
-        String[] negativeWords = {"bad", "terrible", "awful", "hate", "dislike", "worst", "horrible", "angry", "sad", "disappointing", "poor"};
-
-        int positiveCount = 0;
-        int negativeCount = 0;
-
-        for (String word : positiveWords) {
-            if (lowerText.contains(word)) positiveCount++;
-        }
-
-        for (String word : negativeWords) {
-            if (lowerText.contains(word)) negativeCount++;
-        }
-
-        String sentiment;
-        double confidence;
-        String analysis;
-
-        if (positiveCount > negativeCount) {
-            sentiment = "POSITIVE";
-            confidence = 70 + (positiveCount * 5);
-            analysis = "The text shows positive sentiment with " + positiveCount + " positive indicators.";
-        } else if (negativeCount > positiveCount) {
-            sentiment = "NEGATIVE";
-            confidence = 70 + (negativeCount * 5);
-            analysis = "The text shows negative sentiment with " + negativeCount + " negative indicators.";
-        } else if (positiveCount == negativeCount && positiveCount > 0) {
-            sentiment = "MIXED";
-            confidence = 65;
-            analysis = "The text shows mixed emotions with both positive and negative elements.";
-        } else {
-            sentiment = "NEUTRAL";
-            confidence = 80;
-            analysis = "The text appears to be neutral or factual without strong emotional indicators.";
-        }
-
-        // Cap confidence at 95%
-        confidence = Math.min(confidence, 95);
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("sentiment", sentiment);
-        result.put("confidence", confidence);
-        result.put("analysis", analysis);
-        result.put("textLength", text.length());
-        result.put("wordCount", text.split("\\s+").length);
-        result.put("model", "Fallback_Algorithm");
-
-        return result;
-    }
 
     private String getModelsDirectory() {
         try {
@@ -274,6 +339,15 @@ public class AIToolsController {
         response.put("message", "Sentiment Analysis API is working!");
         response.put("status", "success");
         response.put("model", "NaiveBayes with 82% accuracy");
+        return response;
+    }
+
+    @GetMapping("/test-weather")
+    public Map<String, String> testWeather() {
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Weather Prediction API is working!");
+        response.put("status", "success");
+        response.put("model", "Trained on auckland_weather.csv");
         return response;
     }
 }
