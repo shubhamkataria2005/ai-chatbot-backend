@@ -7,7 +7,7 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/api/chat")
-@CrossOrigin(origins = "http://localhost:3000")
+// @CrossOrigin(origins = "http://localhost:3000") - Commented for Railway deployment
 public class ChatController {
 
     @Autowired

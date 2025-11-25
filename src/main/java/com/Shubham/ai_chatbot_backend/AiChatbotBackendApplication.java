@@ -8,9 +8,10 @@ public class AiChatbotBackendApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(AiChatbotBackendApplication.class, args);
-        System.out.println("🚀 AI Chatbot Backend Started!");
-        System.out.println("📍 http://localhost:8080");
-        System.out.println("💬 API: http://localhost:8080/api/chat/send");
-        System.out.println("🔐 MySQL Database: Connected");
+        System.out.println("🚀 AI Chatbot Backend Started on Railway!");
+        System.out.println("📍 Port: " + System.getenv("PORT"));
+        System.out.println("💬 API Endpoints: /api/chat, /api/auth, /api/ai-tools");
+        System.out.println("🔐 MySQL Database: Connected via Railway");
+        System.out.println("🌐 CORS: Configured for production");
     }
 }

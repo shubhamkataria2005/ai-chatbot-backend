@@ -13,7 +13,7 @@ import java.io.*;
 
 @RestController
 @RequestMapping("/api/ai-tools")
-@CrossOrigin(origins = "http://localhost:3000")
+// @CrossOrigin(origins = "http://localhost:3000") - Commented for Railway deployment
 public class AIToolsController {
 
     @Autowired
@@ -486,5 +486,16 @@ public class AIToolsController {
         tools.put("last_updated", new Date().toString());
 
         return tools;
+    }
+
+    // Root endpoint for Railway health checks
+    @GetMapping("/")
+    public Map<String, String> home() {
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "AI Chatbot Backend is running on Railway!");
+        response.put("status", "OK");
+        response.put("timestamp", new Date().toString());
+        response.put("version", "1.0.0");
+        return response;
     }
 }
