@@ -10,55 +10,92 @@ public class CarRecognitionService {
 
     public Map<String, Object> recognizeCar(MultipartFile imageFile) {
         try {
-            // Call Python car recognition
-            Map<String, Object> result = callPythonCarModel(imageFile);
-
-            if (result != null && (boolean) result.get("success")) {
-                return result;
-            } else {
-                // Fallback if Python fails
-                return Map.of(
-                        "success", true,
-                        "predicted_brand", "BMW", // Default fallback
-                        "confidence", 50.0,
-                        "model", "Fallback"
-                );
-            }
+            System.out.println("Starting car recognition...");
+            return callPythonCarModel(imageFile);
 
         } catch (Exception e) {
+            System.out.println("Car recognition error: " + e.getMessage());
             return Map.of(
                     "success", false,
-                    "error", "Car recognition failed"
+                    "error", "Car recognition failed: " + e.getMessage()
             );
         }
     }
 
-    private Map<String, Object> callPythonCarModel(MultipartFile imageFile) {
-        try {
-            // Save image temporarily
-            File tempFile = File.createTempFile("car", ".jpg");
-            imageFile.transferTo(tempFile);
+    private Map<String, Object> callPythonCarModel(MultipartFile imageFile) throws Exception {
+        // Save image temporarily
+        File tempFile = File.createTempFile("car_image", ".jpg");
+        imageFile.transferTo(tempFile);
 
-            // Prepare input
-            Map<String, Object> inputData = Map.of("image_path", tempFile.getAbsolutePath());
-            String inputJson = new com.google.gson.Gson().toJson(inputData);
+        // Get models directory
+        String modelsDir = getModelsDirectory();
+        String pythonScript = modelsDir + "/car_recognition.py";
 
-            // Call Python script
-            ProcessBuilder pb = new ProcessBuilder("python3", "car_recognition.py", inputJson);
-            Process process = pb.start();
+        // Check if files exist
+        File scriptFile = new File(pythonScript);
+        File modelFile = new File(modelsDir + "/car_model.h5");
 
-            // Read result
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line = reader.readLine();
-
-            // Clean up
+        if (!scriptFile.exists() || !modelFile.exists()) {
             tempFile.delete();
-
-            // Parse JSON response
-            return new com.google.gson.Gson().fromJson(line, Map.class);
-
-        } catch (Exception e) {
-            return null;
+            return Map.of("success", false, "error", "Model files not found");
         }
+
+        // Prepare input data
+        Map<String, Object> inputData = Map.of("image_path", tempFile.getAbsolutePath());
+        String inputJson = new com.google.gson.Gson().toJson(inputData);
+
+        // Write JSON to temporary file
+        File inputJsonFile = File.createTempFile("car_input", ".json");
+        try (FileWriter writer = new FileWriter(inputJsonFile)) {
+            writer.write(inputJson);
+        }
+
+        // Execute Python script
+        ProcessBuilder processBuilder = new ProcessBuilder("python", pythonScript, inputJsonFile.getAbsolutePath());
+        processBuilder.directory(new File(modelsDir));
+        processBuilder.redirectErrorStream(true);
+
+        Process process = processBuilder.start();
+
+        // Read output
+        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        String jsonOutput = null;
+        String line;
+
+        while ((line = reader.readLine()) != null) {
+            if (line.trim().startsWith("{")) {
+                jsonOutput = line.trim();
+                break;
+            }
+        }
+
+        // Clean up
+        tempFile.delete();
+        inputJsonFile.delete();
+
+        int exitCode = process.waitFor();
+        if (exitCode != 0 || jsonOutput == null) {
+            return Map.of("success", false, "error", "Python script execution failed");
+        }
+
+        return new com.google.gson.Gson().fromJson(jsonOutput, Map.class);
+    }
+
+    private String getModelsDirectory() {
+        // Check common locations
+        String[] possiblePaths = {
+                "src/main/resources/models",
+                "target/classes/models",
+                "models",
+                "."
+        };
+
+        for (String path : possiblePaths) {
+            File dir = new File(path);
+            if (dir.exists()) {
+                return dir.getAbsolutePath();
+            }
+        }
+        return new File(".").getAbsolutePath();
     }
 }

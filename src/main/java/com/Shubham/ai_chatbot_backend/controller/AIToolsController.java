@@ -176,6 +176,7 @@ public class AIToolsController {
         }
     }
 
+    // Enhanced Car Recognition Endpoint with ML
     @PostMapping("/car-recognition")
     public Map<String, Object> recognizeCar(
             @RequestParam("image") MultipartFile image,
@@ -188,12 +189,56 @@ public class AIToolsController {
 
         try {
             System.out.println("🚗 Car Recognition Request");
-            return carRecognitionService.recognizeCar(image);
+            System.out.println("📁 File name: " + image.getOriginalFilename());
+            System.out.println("📁 File size: " + image.getSize() + " bytes");
+            System.out.println("📁 Content type: " + image.getContentType());
+
+            Map<String, Object> result = carRecognitionService.recognizeCar(image);
+            System.out.println("🎯 Final result: " + result);
+
+            return result;
+
+        } catch (Exception e) {
+            System.out.println("❌ Controller error: " + e.getMessage());
+            e.printStackTrace();
+            return Map.of(
+                    "success", false,
+                    "error", "Car recognition failed: " + e.getMessage()
+            );
+        }
+    }
+
+    // Image Analysis Endpoint (Generic)
+    @PostMapping("/image-analysis")
+    public Map<String, Object> analyzeImage(
+            @RequestParam("image") MultipartFile image,
+            @RequestHeader("Authorization") String sessionToken) {
+
+        // Check authentication
+        if (!userService.validateSession(sessionToken)) {
+            return Map.of("error", "Authentication required");
+        }
+
+        try {
+            System.out.println("🖼️ Image Analysis Request");
+            System.out.println("📁 File name: " + image.getOriginalFilename());
+            System.out.println("📁 File size: " + image.getSize() + " bytes");
+
+            // For now, return basic image info
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Image received successfully");
+            response.put("fileName", image.getOriginalFilename());
+            response.put("fileSize", image.getSize());
+            response.put("contentType", image.getContentType());
+            response.put("analysisType", "basic_info");
+
+            return response;
 
         } catch (Exception e) {
             return Map.of(
                     "success", false,
-                    "error", "Car recognition failed"
+                    "error", "Image analysis failed"
             );
         }
     }
@@ -285,7 +330,6 @@ public class AIToolsController {
         }
     }
 
-
     private String getModelsDirectory() {
         try {
             // Try multiple approaches to find the models directory
@@ -311,6 +355,13 @@ public class AIToolsController {
             if (currentDir.exists()) {
                 System.out.println("📁 Found models in current directory: " + currentDir.getAbsolutePath());
                 return currentDir.getAbsolutePath();
+            }
+
+            // Approach 4: Check target directory (Maven build)
+            File targetModelsDir = new File("target/classes/models");
+            if (targetModelsDir.exists()) {
+                System.out.println("📁 Found models in target: " + targetModelsDir.getAbsolutePath());
+                return targetModelsDir.getAbsolutePath();
             }
 
         } catch (Exception e) {
@@ -349,5 +400,91 @@ public class AIToolsController {
         response.put("status", "success");
         response.put("model", "Trained on auckland_weather.csv");
         return response;
+    }
+
+    @GetMapping("/test-car")
+    public Map<String, String> testCar() {
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Car Recognition API is working!");
+        response.put("status", "success");
+        response.put("model", "TensorFlow CNN Model");
+        response.put("supported_brands", "BMW, Mercedes, Audi, Toyota, Honda, Ford");
+        return response;
+    }
+
+    // Health check endpoint for all AI tools
+    @GetMapping("/health")
+    public Map<String, Object> healthCheck() {
+        Map<String, Object> health = new HashMap<>();
+        health.put("status", "healthy");
+        health.put("timestamp", new Date().toString());
+        health.put("services", Map.of(
+                "salary_prediction", "active",
+                "sentiment_analysis", "active",
+                "weather_prediction", "active",
+                "car_recognition", "active",
+                "authentication", "active"
+        ));
+        health.put("version", "1.0.0");
+        return health;
+    }
+
+    // Get available AI tools
+    @GetMapping("/tools")
+    public Map<String, Object> getAvailableTools() {
+        Map<String, Object> tools = new HashMap<>();
+
+        List<Map<String, String>> toolList = new ArrayList<>();
+
+        // Salary Prediction Tool
+        Map<String, String> salaryTool = new HashMap<>();
+        salaryTool.put("name", "Salary Prediction");
+        salaryTool.put("endpoint", "/api/ai-tools/salary-prediction");
+        salaryTool.put("description", "Predict tech salaries based on experience, role, location, and skills");
+        salaryTool.put("method", "POST");
+        salaryTool.put("status", "active");
+        toolList.add(salaryTool);
+
+        // Sentiment Analysis Tool
+        Map<String, String> sentimentTool = new HashMap<>();
+        sentimentTool.put("name", "Sentiment Analysis");
+        sentimentTool.put("endpoint", "/api/ai-tools/sentiment-analysis");
+        sentimentTool.put("description", "Analyze text sentiment using ML model");
+        sentimentTool.put("method", "POST");
+        sentimentTool.put("status", "active");
+        toolList.add(sentimentTool);
+
+        // Weather Prediction Tool
+        Map<String, String> weatherTool = new HashMap<>();
+        weatherTool.put("name", "Weather Prediction");
+        weatherTool.put("endpoint", "/api/ai-tools/weather-prediction");
+        weatherTool.put("description", "Predict weather conditions based on current parameters");
+        weatherTool.put("method", "POST");
+        weatherTool.put("status", "active");
+        toolList.add(weatherTool);
+
+        // Car Recognition Tool
+        Map<String, String> carTool = new HashMap<>();
+        carTool.put("name", "Car Recognition");
+        carTool.put("endpoint", "/api/ai-tools/car-recognition");
+        carTool.put("description", "Identify car brands from images using TensorFlow CNN");
+        carTool.put("method", "POST");
+        carTool.put("status", "active");
+        toolList.add(carTool);
+
+        // Image Analysis Tool
+        Map<String, String> imageTool = new HashMap<>();
+        imageTool.put("name", "Image Analysis");
+        imageTool.put("endpoint", "/api/ai-tools/image-analysis");
+        imageTool.put("description", "Basic image analysis and information extraction");
+        imageTool.put("method", "POST");
+        imageTool.put("status", "active");
+        toolList.add(imageTool);
+
+        tools.put("tools", toolList);
+        tools.put("total_tools", toolList.size());
+        tools.put("last_updated", new Date().toString());
+
+        return tools;
     }
 }
