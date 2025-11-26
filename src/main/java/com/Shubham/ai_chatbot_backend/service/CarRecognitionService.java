@@ -51,7 +51,7 @@ public class CarRecognitionService {
         }
 
         // Execute Python script
-        ProcessBuilder processBuilder = new ProcessBuilder("python", pythonScript, inputJsonFile.getAbsolutePath());
+        ProcessBuilder processBuilder = new ProcessBuilder("/opt/venv/bin/python", pythonScript, inputJsonFile.getAbsolutePath());
         processBuilder.directory(new File(modelsDir));
         processBuilder.redirectErrorStream(true);
 

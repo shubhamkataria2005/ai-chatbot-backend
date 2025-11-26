@@ -291,7 +291,7 @@ public class AIToolsController {
                 writer.write("print('{\"success\": true, \"message\": \"Python is working!\"}')");
             }
 
-            Process process = Runtime.getRuntime().exec("python " + tempScript.getAbsolutePath());
+            Process process = Runtime.getRuntime().exec("/opt/venv/bin/python " + tempScript.getAbsolutePath());
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             String output = reader.readLine();
             int exitCode = process.waitFor();
@@ -339,7 +339,7 @@ public class AIToolsController {
                 );
             }
 
-            Process process = Runtime.getRuntime().exec("python " + tempScript.getAbsolutePath());
+            Process process = Runtime.getRuntime().exec("/opt/venv/bin/python " + tempScript.getAbsolutePath());
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             String output = reader.readLine();
             int exitCode = process.waitFor();
@@ -393,9 +393,9 @@ public class AIToolsController {
                 return null;
             }
 
-            // Execute Python script with file input
+            // Execute Python script with file input using virtual environment Python
             ProcessBuilder processBuilder = new ProcessBuilder();
-            processBuilder.command("python", pythonScript, tempFile.getAbsolutePath());
+            processBuilder.command("/opt/venv/bin/python", pythonScript, tempFile.getAbsolutePath());
             processBuilder.directory(new File(modelsDir));
             processBuilder.redirectErrorStream(true);
 

@@ -65,7 +65,7 @@ public class WeatherPredictionService {
 
             // Execute Python script with UTF-8 encoding
             ProcessBuilder processBuilder = new ProcessBuilder();
-            processBuilder.command("python", pythonScript, tempFile.getAbsolutePath());
+            processBuilder.command("/opt/venv/bin/python", pythonScript, tempFile.getAbsolutePath());
             processBuilder.directory(new File(modelsDir));
             processBuilder.redirectErrorStream(true);
 

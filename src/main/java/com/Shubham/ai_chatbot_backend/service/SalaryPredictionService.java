@@ -77,7 +77,7 @@ public class SalaryPredictionService {
 
             // Create ProcessBuilder
             ProcessBuilder processBuilder = new ProcessBuilder();
-            processBuilder.command("python", pythonScript, tempFile.getAbsolutePath());
+            processBuilder.command("/opt/venv/bin/python", pythonScript, tempFile.getAbsolutePath());
             processBuilder.directory(new File(modelsDir));
             processBuilder.redirectErrorStream(true);
 
