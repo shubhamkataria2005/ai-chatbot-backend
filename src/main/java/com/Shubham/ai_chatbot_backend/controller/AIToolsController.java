@@ -13,7 +13,6 @@ import java.io.*;
 
 @RestController
 @RequestMapping("/api/ai-tools")
-// @CrossOrigin(origins = "http://localhost:3000") - Commented for Railway deployment
 public class AIToolsController {
 
     @Autowired
@@ -61,22 +60,15 @@ public class AIToolsController {
                     experience, role, location, education, skills
             );
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("predictedSalary", prediction.get("salary"));
-            response.put("currency", prediction.get("currency"));
-            response.put("salaryUSD", prediction.get("salaryUSD"));
-            response.put("confidence", prediction.get("confidence"));
-            response.put("factors", prediction.get("factors"));
-            response.put("model", "ML_Model_v1.0");
-
-            return response;
+            // Return the prediction directly from ML service
+            return prediction;
 
         } catch (Exception e) {
+            System.out.println("❌ Salary prediction error: " + e.getMessage());
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             errorResponse.put("error", "Prediction failed");
-            errorResponse.put("message", e.getMessage());
+            errorResponse.put("message", "ML service unavailable. Please try again later.");
             return errorResponse;
         }
     }
@@ -105,7 +97,7 @@ public class AIToolsController {
             if (sentimentResult != null && sentimentResult.get("success") != null && (boolean) sentimentResult.get("success")) {
                 return sentimentResult;
             } else {
-                // Return error response if ML model fails
+                // Return error if ML model fails
                 Map<String, Object> errorResponse = new HashMap<>();
                 errorResponse.put("success", false);
                 errorResponse.put("error", "Sentiment analysis service temporarily unavailable");
@@ -114,6 +106,7 @@ public class AIToolsController {
             }
 
         } catch (Exception e) {
+            System.out.println("❌ Sentiment analysis error: " + e.getMessage());
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             errorResponse.put("error", "Analysis failed");
@@ -155,23 +148,15 @@ public class AIToolsController {
                     temperature, humidity, windSpeed, pressure, rainfall
             );
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("predictedTemperature", prediction.get("predictedTemperature"));
-            response.put("predictedRainfall", prediction.get("predictedRainfall"));
-            response.put("weatherCondition", prediction.get("weatherCondition"));
-            response.put("confidence", prediction.get("confidence"));
-            response.put("factors", prediction.get("factors"));
-            response.put("model", prediction.get("model"));
-            response.put("location", "Auckland, NZ");
-
-            return response;
+            // Return the prediction directly from ML service
+            return prediction;
 
         } catch (Exception e) {
+            System.out.println("❌ Weather prediction error: " + e.getMessage());
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             errorResponse.put("error", "Weather prediction failed");
-            errorResponse.put("message", e.getMessage());
+            errorResponse.put("message", "Please check your input parameters");
             return errorResponse;
         }
     }
@@ -242,6 +227,141 @@ public class AIToolsController {
             );
         }
     }
+
+    // ================= DEBUG ENDPOINTS =================
+
+    @GetMapping("/debug-env")
+    public Map<String, Object> debugEnvironment() {
+        Map<String, Object> result = new HashMap<>();
+
+        // Check Python availability
+        try {
+            Process python3 = Runtime.getRuntime().exec("python3 --version");
+            int exit3 = python3.waitFor();
+            result.put("python3Available", exit3 == 0);
+
+            Process python = Runtime.getRuntime().exec("python --version");
+            int exit = python.waitFor();
+            result.put("pythonAvailable", exit == 0);
+        } catch (Exception e) {
+            result.put("pythonError", e.getMessage());
+        }
+
+        // Check models directory
+        String modelsDir = getModelsDirectory();
+        result.put("modelsDirectory", modelsDir);
+
+        File dir = new File(modelsDir);
+        result.put("directoryExists", dir.exists());
+
+        // List model files
+        if (dir.exists()) {
+            List<String> files = new ArrayList<>();
+            String[] fileList = dir.list();
+            if (fileList != null) {
+                for (String file : fileList) {
+                    if (file.endsWith(".pkl") || file.endsWith(".h5") || file.endsWith(".py")) {
+                        files.add(file);
+                    }
+                }
+            }
+            result.put("modelFiles", files);
+
+            // Check specific important files
+            result.put("carModelExists", new File(dir, "car_model.h5").exists());
+            result.put("salaryModelExists", new File(dir, "salary_predictor_single.pkl").exists());
+            result.put("sentimentModelExists", new File(dir, "sentiment_model.pkl").exists());
+            result.put("weatherModelExists", new File(dir, "weather_model.pkl").exists());
+        }
+
+        // System info
+        result.put("javaVersion", System.getProperty("java.version"));
+        result.put("osName", System.getProperty("os.name"));
+        result.put("workingDirectory", new File(".").getAbsolutePath());
+
+        return result;
+    }
+
+    @GetMapping("/test-simple-python")
+    public Map<String, Object> testSimplePython() {
+        try {
+            // Create a simple Python script
+            File tempScript = File.createTempFile("test_python", ".py");
+            try (FileWriter writer = new FileWriter(tempScript)) {
+                writer.write("print('{\"success\": true, \"message\": \"Python is working!\"}')");
+            }
+
+            Process process = Runtime.getRuntime().exec("python " + tempScript.getAbsolutePath());
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String output = reader.readLine();
+            int exitCode = process.waitFor();
+
+            tempScript.delete();
+
+            return Map.of(
+                    "success", exitCode == 0,
+                    "output", output,
+                    "exitCode", exitCode
+            );
+        } catch (Exception e) {
+            return Map.of("success", false, "error", e.getMessage());
+        }
+    }
+
+    @GetMapping("/test-model-file")
+    public Map<String, Object> testModelFile(@RequestParam String filename) {
+        String modelsDir = getModelsDirectory();
+        File modelFile = new File(modelsDir, filename);
+
+        return Map.of(
+                "filename", filename,
+                "fullPath", modelFile.getAbsolutePath(),
+                "exists", modelFile.exists(),
+                "size", modelFile.exists() ? modelFile.length() : 0,
+                "readable", modelFile.canRead()
+        );
+    }
+
+    @GetMapping("/test-python-execution")
+    public Map<String, Object> testPythonExecution() {
+        try {
+            // Test if we can execute a Python script with dependencies
+            File tempScript = File.createTempFile("test_ml", ".py");
+            try (FileWriter writer = new FileWriter(tempScript)) {
+                writer.write(
+                        "try:\n" +
+                                "    import numpy as np\n" +
+                                "    import pandas as pd\n" +
+                                "    import sklearn\n" +
+                                "    print('{\"success\": true, \"message\": \"All ML libraries available!\"}')\n" +
+                                "except Exception as e:\n" +
+                                "    print('{\"success\": false, \"error\": \"' + str(e) + '\"}')\n"
+                );
+            }
+
+            Process process = Runtime.getRuntime().exec("python " + tempScript.getAbsolutePath());
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String output = reader.readLine();
+            int exitCode = process.waitFor();
+
+            tempScript.delete();
+
+            // Parse JSON output
+            if (output != null && output.startsWith("{")) {
+                return new com.google.gson.Gson().fromJson(output, Map.class);
+            }
+
+            return Map.of(
+                    "success", exitCode == 0,
+                    "output", output,
+                    "exitCode", exitCode
+            );
+        } catch (Exception e) {
+            return Map.of("success", false, "error", e.getMessage());
+        }
+    }
+
+    // ================= PRIVATE METHODS =================
 
     private Map<String, Object> callPythonSentimentModel(String text) {
         try {
@@ -373,6 +493,8 @@ public class AIToolsController {
         System.out.println("⚠️ Using fallback path: " + fallbackPath);
         return fallbackPath;
     }
+
+    // ================= EXISTING ENDPOINTS =================
 
     // Test endpoints
     @GetMapping("/test-ml")

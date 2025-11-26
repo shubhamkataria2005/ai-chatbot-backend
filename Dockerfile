@@ -1,5 +1,17 @@
 # Build stage
 FROM maven:3.9.8-eclipse-temurin-17 AS build
+
+# Install Python and ML libraries
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    && pip3 install \
+    numpy \
+    pandas \
+    scikit-learn \
+    nltk \
+    tensorflow-cpu
+
 WORKDIR /app
 
 # Copy pom.xml and download dependencies first (for caching)
@@ -12,6 +24,18 @@ RUN mvn clean package -DskipTests
 
 # Runtime stage
 FROM eclipse-temurin:17-jre
+
+# Install Python in runtime stage too
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    && pip3 install \
+    numpy \
+    pandas \
+    scikit-learn \
+    nltk \
+    tensorflow-cpu
+
 WORKDIR /app
 
 # Copy the built JAR file
