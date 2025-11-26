@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: ai-chatbot-backend
+    plan: free
+    docker:
+      dockerfile: Dockerfile
+      dockerContext: .
+    envVars:
+      - key: JAVA_OPTS
+        value: -Xmx512m -Xms256m
+      - key: ALLOWED_ORIGINS
+        value: https://ai-chatbot-frontend.onrender.com,http://localhost:3000
