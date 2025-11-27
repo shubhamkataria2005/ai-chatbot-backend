@@ -4,45 +4,74 @@ import com.theokanning.openai.service.OpenAiService;
 import com.theokanning.openai.completion.CompletionRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.context.annotation.Configuration;
+import jakarta.annotation.PostConstruct;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 
 @Service
-@Configuration
 public class OpenAIService {
 
     @Value("${openai.api.key:}")
     private String apiKey;
 
     private OpenAiService openAiService;
+    private boolean openAiInitialized = false;
 
-    // Initialize when the bean is created
-    public OpenAIService() {
-        // Initialization will happen after properties are set
+    @PostConstruct
+    public void init() {
+        initializeOpenAI();
     }
 
-    // This method will be called after properties are injected
     private void initializeOpenAI() {
+        System.out.println("🔑 Initializing OpenAI Service...");
+        System.out.println("🔑 API Key present: " + (apiKey != null && !apiKey.isEmpty()));
+
         if (apiKey != null && !apiKey.isEmpty() && !apiKey.equals("your-test-key-here")) {
             try {
+                System.out.println("🔑 API Key starts with: " + apiKey.substring(0, Math.min(10, apiKey.length())) + "...");
+                System.out.println("🔑 API Key length: " + apiKey.length());
+
                 this.openAiService = new OpenAiService(apiKey, Duration.ofSeconds(60));
-                System.out.println("✅ OpenAI Service initialized successfully");
+
+                // Test the connection with a simple request
+                try {
+                    CompletionRequest testRequest = CompletionRequest.builder()
+                            .model("gpt-3.5-turbo-instruct")
+                            .prompt("Say 'Hello'")
+                            .maxTokens(5)
+                            .build();
+
+                    String testResponse = openAiService.createCompletion(testRequest)
+                            .getChoices()
+                            .get(0)
+                            .getText()
+                            .trim();
+
+                    System.out.println("✅ OpenAI Service initialized successfully");
+                    System.out.println("✅ Test response: " + testResponse);
+                    this.openAiInitialized = true;
+
+                } catch (Exception testError) {
+                    System.out.println("❌ OpenAI test failed: " + testError.getMessage());
+                    this.openAiService = null;
+                    this.openAiInitialized = false;
+                }
+
             } catch (Exception e) {
                 System.out.println("❌ OpenAI initialization failed: " + e.getMessage());
                 this.openAiService = null;
+                this.openAiInitialized = false;
             }
         } else {
-            System.out.println("⚠️ OpenAI API key not set, using fallback mode");
+            System.out.println("⚠️ OpenAI API key not set or using default, using fallback mode");
+            System.out.println("🔑 API Key: " + (apiKey == null ? "null" : "empty or default"));
             this.openAiService = null;
+            this.openAiInitialized = false;
         }
     }
 
     public String generateResponse(String userMessage) {
-        // Initialize OpenAI on first use (lazy initialization)
-        if (openAiService == null && apiKey != null && !apiKey.isEmpty()) {
-            initializeOpenAI();
-        }
-
         // First, check if it's one of your custom questions
         String customResponse = getCustomResponse(userMessage);
         if (customResponse != null) {
@@ -50,8 +79,8 @@ public class OpenAIService {
             return customResponse;
         }
 
-        // If OpenAI is available, use it
-        if (openAiService != null) {
+        // If OpenAI is available and initialized, use it
+        if (openAiService != null && openAiInitialized) {
             System.out.println("🚀 Using OpenAI API");
             try {
                 return callOpenAI(userMessage);
@@ -63,7 +92,7 @@ public class OpenAIService {
         }
 
         // If OpenAI not available, use simple responses
-        System.out.println("🔧 Using simple response (OpenAI not configured)");
+        System.out.println("🔧 Using simple response (OpenAI not configured or failed)");
         return getSimpleResponse(userMessage);
     }
 
@@ -137,6 +166,7 @@ public class OpenAIService {
             return response;
 
         } catch (Exception e) {
+            System.out.println("❌ OpenAI API call failed: " + e.getMessage());
             throw new RuntimeException("OpenAI API call failed: " + e.getMessage(), e);
         }
     }
@@ -166,6 +196,17 @@ public class OpenAIService {
     }
 
     public boolean isOpenAIAvailable() {
-        return openAiService != null;
+        return openAiService != null && openAiInitialized;
+    }
+
+    // New method to get OpenAI status details
+    public Map<String, Object> getOpenAIStatus() {
+        Map<String, Object> status = new HashMap<>();
+        status.put("initialized", openAiInitialized);
+        status.put("serviceAvailable", openAiService != null);
+        status.put("apiKeyPresent", apiKey != null && !apiKey.isEmpty() && !apiKey.equals("your-test-key-here"));
+        status.put("apiKeyLength", apiKey != null ? apiKey.length() : 0);
+        status.put("apiKeyPrefix", apiKey != null && apiKey.length() > 7 ? apiKey.substring(0, 7) : "N/A");
+        return status;
     }
 }

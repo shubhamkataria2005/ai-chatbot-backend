@@ -90,6 +90,14 @@ public class ChatController {
         return info;
     }
 
+    // OpenAI Status Endpoint
+    @GetMapping("/openai-status")
+    public Map<String, Object> getOpenAIStatus() {
+        Map<String, Object> status = openAIService.getOpenAIStatus();
+        status.put("timestamp", new Date().toString());
+        return status;
+    }
+
     @GetMapping("/test")
     public Map<String, String> test() {
         Map<String, String> response = new HashMap<>();
