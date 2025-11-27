@@ -7,3 +7,7 @@ mvnw
 mvnw.cmd
 *.log
 .DS_Store
+**/test/
+**/*.iml
+**/.idea/
+**/node_modules/

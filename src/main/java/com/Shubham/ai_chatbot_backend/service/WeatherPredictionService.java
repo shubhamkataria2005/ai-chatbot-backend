@@ -1,11 +1,14 @@
 package com.Shubham.ai_chatbot_backend.service;
 
+import com.google.gson.Gson;
 import org.springframework.stereotype.Service;
 import java.util.*;
 import java.io.*;
 
 @Service
 public class WeatherPredictionService {
+
+    private final Gson gson = new Gson();
 
     public Map<String, Object> predictWeather(double temperature, double humidity,
                                               double windSpeed, double pressure, double rainfall) {
@@ -39,7 +42,7 @@ public class WeatherPredictionService {
             inputData.put("pressure", pressure);
             inputData.put("rainfall", rainfall);
 
-            String inputJson = new com.google.gson.Gson().toJson(inputData);
+            String inputJson = gson.toJson(inputData);
 
             // Write JSON to a temporary file
             File tempFile = File.createTempFile("weather_input", ".json");
@@ -47,18 +50,12 @@ public class WeatherPredictionService {
                 writer.write(inputJson);
             }
 
-            System.out.println("Created temp file: " + tempFile.getAbsolutePath());
-
-            // Get the models directory path
             String modelsDir = getModelsDirectory();
             String pythonScript = modelsDir + "/weather_predictor.py";
-
-            System.out.println("Python script path: " + pythonScript);
 
             // Check if Python script exists
             File scriptFile = new File(pythonScript);
             if (!scriptFile.exists()) {
-                System.out.println("Python weather script not found: " + pythonScript);
                 tempFile.delete();
                 return null;
             }
@@ -73,7 +70,6 @@ public class WeatherPredictionService {
             Map<String, String> env = processBuilder.environment();
             env.put("PYTHONIOENCODING", "utf-8");
 
-            System.out.println("Starting Python weather process...");
             Process process = processBuilder.start();
 
             // Read output with UTF-8 encoding
@@ -81,45 +77,24 @@ public class WeatherPredictionService {
             String jsonOutput = null;
             String line;
 
-            System.out.println("Python output:");
             while ((line = reader.readLine()) != null) {
-                System.out.println("   " + line);
-                // Look for lines that start with { (JSON)
                 if (line.trim().startsWith("{")) {
                     jsonOutput = line.trim();
-                    System.out.println("Found weather JSON output: " + jsonOutput);
+                    break;
                 }
             }
 
             int exitCode = process.waitFor();
-            System.out.println("Python exit code: " + exitCode);
-
-            // Clean up temp file
             tempFile.delete();
 
-            if (exitCode != 0) {
-                System.out.println("Python weather script failed with exit code: " + exitCode);
+            if (exitCode != 0 || jsonOutput == null) {
                 return null;
             }
 
-            if (jsonOutput == null) {
-                System.out.println("No JSON found in weather Python output");
-                return null;
-            }
-
-            try {
-                Map<String, Object> result = new com.google.gson.Gson().fromJson(jsonOutput, Map.class);
-                System.out.println("Successfully parsed weather Python response");
-                return result;
-            } catch (Exception e) {
-                System.out.println("Failed to parse JSON from Python: " + e.getMessage());
-                System.out.println("Raw output was: " + jsonOutput);
-                return null;
-            }
+            return gson.fromJson(jsonOutput, Map.class);
 
         } catch (Exception e) {
             System.out.println("Error calling Python weather model: " + e.getMessage());
-            e.printStackTrace();
             return null;
         }
     }
@@ -127,7 +102,6 @@ public class WeatherPredictionService {
     private Map<String, Object> enhancedFallbackWeatherPrediction(double temperature, double humidity,
                                                                   double windSpeed, double pressure, double rainfall) {
 
-        // Enhanced rule-based prediction with ML-like features
         Random random = new Random();
 
         // Temperature prediction with seasonal adjustment
@@ -136,16 +110,16 @@ public class WeatherPredictionService {
 
         // Pressure-based adjustments
         if (pressure < 1000) {
-            tempChange -= 1.5 + random.nextDouble(); // Low pressure = cooler
+            tempChange -= 1.5 + random.nextDouble();
         } else if (pressure > 1020) {
-            tempChange += 1.0 + random.nextDouble(); // High pressure = warmer
+            tempChange += 1.0 + random.nextDouble();
         }
 
         // Humidity-based adjustments
         if (humidity > 85) {
-            tempChange -= 0.8; // High humidity feels cooler
+            tempChange -= 0.8;
         } else if (humidity < 60) {
-            tempChange += 0.5; // Low humidity feels warmer
+            tempChange += 0.5;
         }
 
         // Wind chill effect
@@ -153,15 +127,15 @@ public class WeatherPredictionService {
             tempChange -= 1.2;
         }
 
-        double predictedTemp = baseTemp + tempChange + (random.nextDouble() - 0.5); // Small random variation
+        double predictedTemp = baseTemp + tempChange + (random.nextDouble() - 0.5);
 
         // Rainfall prediction
         double rainProbability = 0.0;
 
         if (humidity > 80) rainProbability += 0.4;
         if (pressure < 1010) rainProbability += 0.3;
-        if (rainfall > 1.0) rainProbability += 0.2; // If currently raining
-        if (temperature > 25 && humidity > 70) rainProbability += 0.3; // Summer storm conditions
+        if (rainfall > 1.0) rainProbability += 0.2;
+        if (temperature > 25 && humidity > 70) rainProbability += 0.3;
 
         double predictedRainfall = rainProbability * (8.0 + random.nextDouble() * 4.0);
 
@@ -173,7 +147,7 @@ public class WeatherPredictionService {
         result.put("predictedTemperature", Math.round(predictedTemp * 10.0) / 10.0);
         result.put("predictedRainfall", Math.round(predictedRainfall * 10.0) / 10.0);
         result.put("weatherCondition", weatherCondition);
-        result.put("confidence", 70 + random.nextInt(20)); // 70-90% confidence
+        result.put("confidence", 70 + random.nextInt(20));
         result.put("model", "Enhanced_Fallback_v2.0");
         result.put("ml_model_status", "fallback_activated");
 
@@ -210,28 +184,19 @@ public class WeatherPredictionService {
 
     private String getModelsDirectory() {
         try {
-            // Try multiple approaches to find the models directory
-
-            // Approach 1: Check if running from IDE (development)
             File devModelsDir = new File("src/main/resources/models");
             if (devModelsDir.exists()) {
-                System.out.println("Found models in: " + devModelsDir.getAbsolutePath());
                 return devModelsDir.getAbsolutePath();
             }
 
-            // Approach 2: Check if running from JAR (production)
             ClassLoader classLoader = getClass().getClassLoader();
             java.net.URL resource = classLoader.getResource("models");
             if (resource != null) {
-                String jarPath = new File(resource.toURI()).getAbsolutePath();
-                System.out.println("Found models in JAR: " + jarPath);
-                return jarPath;
+                return new File(resource.toURI()).getAbsolutePath();
             }
 
-            // Approach 3: Current directory
             File currentDir = new File("models");
             if (currentDir.exists()) {
-                System.out.println("Found models in current directory: " + currentDir.getAbsolutePath());
                 return currentDir.getAbsolutePath();
             }
 
@@ -239,9 +204,6 @@ public class WeatherPredictionService {
             System.out.println("Error finding models directory: " + e.getMessage());
         }
 
-        // Last resort
-        String fallbackPath = new File(".").getAbsolutePath();
-        System.out.println("Using fallback path: " + fallbackPath);
-        return fallbackPath;
+        return new File(".").getAbsolutePath();
     }
 }

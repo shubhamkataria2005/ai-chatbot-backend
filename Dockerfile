@@ -15,7 +15,8 @@ RUN /opt/venv/bin/pip install --upgrade pip && \
     pandas \
     scikit-learn \
     nltk \
-    tensorflow-cpu
+    tensorflow-cpu \
+    pillow
 
 WORKDIR /app
 

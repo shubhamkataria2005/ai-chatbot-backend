@@ -1,5 +1,6 @@
 package com.Shubham.ai_chatbot_backend.service;
 
+import com.google.gson.Gson;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.*;
@@ -8,11 +9,11 @@ import java.io.*;
 @Service
 public class CarRecognitionService {
 
+    private final Gson gson = new Gson();
+
     public Map<String, Object> recognizeCar(MultipartFile imageFile) {
         try {
-            System.out.println("Starting car recognition...");
             return callPythonCarModel(imageFile);
-
         } catch (Exception e) {
             System.out.println("Car recognition error: " + e.getMessage());
             return Map.of(
@@ -42,7 +43,7 @@ public class CarRecognitionService {
 
         // Prepare input data
         Map<String, Object> inputData = Map.of("image_path", tempFile.getAbsolutePath());
-        String inputJson = new com.google.gson.Gson().toJson(inputData);
+        String inputJson = gson.toJson(inputData);
 
         // Write JSON to temporary file
         File inputJsonFile = File.createTempFile("car_input", ".json");
@@ -78,11 +79,10 @@ public class CarRecognitionService {
             return Map.of("success", false, "error", "Python script execution failed");
         }
 
-        return new com.google.gson.Gson().fromJson(jsonOutput, Map.class);
+        return gson.fromJson(jsonOutput, Map.class);
     }
 
     private String getModelsDirectory() {
-        // Check common locations
         String[] possiblePaths = {
                 "src/main/resources/models",
                 "target/classes/models",
