@@ -12,135 +12,77 @@ public class AIToolsService {
 
     public Map<String, Object> callPythonSentimentModel(String text) {
         try {
+            System.out.println("🔍 Attempting ML sentiment analysis...");
             Map<String, Object> mlResult = callPythonSentimentML(text);
 
-            if (mlResult != null && mlResult.get("success") != null &&
-                    (boolean) mlResult.get("success")) {
+            if (isValidSentimentResult(mlResult)) {
+                System.out.println("✅ Using ML sentiment model");
                 return mlResult;
             } else {
-                System.out.println("🔄 ML sentiment model failed, using fallback");
-                return fallbackSentimentAnalysis(text);
+                System.out.println("❌ ML sentiment model failed");
+                return createSentimentErrorResponse("ML sentiment analysis unavailable");
             }
 
         } catch (Exception e) {
-            System.out.println("❌ ML sentiment error, using fallback: " + e.getMessage());
-            return fallbackSentimentAnalysis(text);
+            System.out.println("❌ ML sentiment error: " + e.getMessage());
+            return createSentimentErrorResponse("Sentiment analysis service error");
         }
     }
 
-    private Map<String, Object> fallbackSentimentAnalysis(String text) {
+    private boolean isValidSentimentResult(Map<String, Object> mlResult) {
+        if (mlResult == null) {
+            System.out.println("❌ Sentiment ML result is null");
+            return false;
+        }
+
+        if (mlResult.get("success") == null || !(boolean) mlResult.get("success")) {
+            System.out.println("❌ Sentiment ML result indicates failure");
+            return false;
+        }
+
+        // Check for required sentiment fields
+        Object sentimentObj = mlResult.get("sentiment");
+        Object confidenceObj = mlResult.get("confidence");
+
+        if (sentimentObj == null || confidenceObj == null) {
+            System.out.println("❌ Sentiment or confidence values are null");
+            return false;
+        }
+
         try {
-            System.out.println("😊 Using fallback sentiment analysis");
+            String sentiment = (String) sentimentObj;
+            double confidence = ((Number) confidenceObj).doubleValue();
 
-            // Simple rule-based sentiment analysis
-            String lowerText = text.toLowerCase();
-
-            // Positive words and phrases
-            Set<String> positiveWords = Set.of(
-                    "good", "great", "excellent", "amazing", "wonderful", "fantastic",
-                    "love", "like", "awesome", "brilliant", "perfect", "happy",
-                    "pleased", "satisfied", "outstanding", "superb", "nice", "best",
-                    "beautiful", "thanks", "thank you", "appreciate", "recommend"
-            );
-
-            // Negative words and phrases
-            Set<String> negativeWords = Set.of(
-                    "bad", "terrible", "awful", "horrible", "hate", "dislike",
-                    "worst", "poor", "disappointing", "annoying", "frustrating",
-                    "angry", "upset", "sad", "unhappy", "disgusting", "rubbish",
-                    "waste", "useless", "broken", "problem", "issue", "complaint"
-            );
-
-            // Neutral/negation words
-            Set<String> negationWords = Set.of("not", "no", "never", "none", "nothing");
-
-            // Count sentiment indicators
-            int positiveCount = 0;
-            int negativeCount = 0;
-            boolean hasNegation = false;
-
-            String[] words = lowerText.split("\\s+");
-            for (int i = 0; i < words.length; i++) {
-                String word = words[i].replaceAll("[^a-zA-Z]", "");
-
-                if (positiveWords.contains(word)) {
-                    // Check for negation before positive word
-                    if (i > 0 && negationWords.contains(words[i-1].toLowerCase())) {
-                        negativeCount++;
-                        hasNegation = true;
-                    } else {
-                        positiveCount++;
-                    }
-                }
-
-                if (negativeWords.contains(word)) {
-                    // Check for negation before negative word (creates positive)
-                    if (i > 0 && negationWords.contains(words[i-1].toLowerCase())) {
-                        positiveCount++;
-                        hasNegation = true;
-                    } else {
-                        negativeCount++;
-                    }
-                }
+            // Validate sentiment values
+            Set<String> validSentiments = Set.of("positive", "negative", "neutral");
+            if (!validSentiments.contains(sentiment.toLowerCase())) {
+                System.out.println("❌ Invalid sentiment value: " + sentiment);
+                return false;
             }
 
-            // Determine sentiment
-            String sentiment;
-            double confidence;
-
-            if (positiveCount > negativeCount) {
-                sentiment = "positive";
-                confidence = 0.6 + (positiveCount * 0.1);
-            } else if (negativeCount > positiveCount) {
-                sentiment = "negative";
-                confidence = 0.6 + (negativeCount * 0.1);
-            } else {
-                sentiment = "neutral";
-                confidence = 0.5;
+            if (confidence < 0 || confidence > 100 || Double.isNaN(confidence)) {
+                System.out.println("❌ Invalid confidence value: " + confidence);
+                return false;
             }
 
-            // Adjust confidence based on text length and clarity
-            confidence = Math.min(confidence + (text.length() > 20 ? 0.1 : 0), 0.85);
-            if (hasNegation) confidence += 0.05;
+            System.out.println("✅ Valid ML sentiment result: " + sentiment + " (" + confidence + "%)");
+            return true;
 
-            // Text complexity analysis
-            int wordCount = words.length;
-            String complexity = wordCount < 10 ? "simple" : wordCount < 25 ? "moderate" : "complex";
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("sentiment", sentiment);
-            result.put("confidence", Math.round(confidence * 100));
-            result.put("analysis", String.format(
-                    "The text shows %s sentiment with %.0f%% confidence",
-                    sentiment, confidence * 100
-            ));
-            result.put("textLength", text.length());
-            result.put("wordCount", wordCount);
-            result.put("positiveIndicators", positiveCount);
-            result.put("negativeIndicators", negativeCount);
-            result.put("complexity", complexity);
-            result.put("model", "RuleBased_Sentiment_Fallback_v1.0");
-            result.put("ml_model_status", "fallback_used");
-
-            return result;
-
-        } catch (Exception e) {
-            System.out.println("❌ Fallback sentiment analysis failed: " + e.getMessage());
-            return createSentimentErrorResponse("Sentiment analysis service temporarily unavailable");
+        } catch (ClassCastException e) {
+            System.out.println("❌ Sentiment values are invalid types: " + e.getMessage());
+            return false;
         }
     }
 
     private Map<String, Object> createSentimentErrorResponse(String message) {
         Map<String, Object> errorResponse = new HashMap<>();
         errorResponse.put("success", false);
-        errorResponse.put("error", "Analysis service unavailable");
+        errorResponse.put("error", "ML sentiment analysis unavailable");
         errorResponse.put("message", message);
-        errorResponse.put("suggestion", "Please try again with different text");
+        errorResponse.put("suggestion", "Please ensure sentiment_model.pkl and required Python dependencies are installed");
         return errorResponse;
     }
 
-    // Existing ML sentiment method (keep as is)
     private Map<String, Object> callPythonSentimentML(String text) {
         try {
             Map<String, Object> inputData = Map.of("text", text);
@@ -151,11 +93,25 @@ public class AIToolsService {
                 writer.write(inputJson);
             }
 
+            System.out.println("📁 Created temp file: " + tempFile.getAbsolutePath());
+
             String modelsDir = getModelsDirectory();
             String pythonScript = modelsDir + "/sentiment_predictor.py";
 
+            System.out.println("📁 Python script path: " + pythonScript);
+
+            // Check if Python script exists
             File scriptFile = new File(pythonScript);
             if (!scriptFile.exists()) {
+                System.out.println("❌ Python script not found: " + pythonScript);
+                tempFile.delete();
+                return null;
+            }
+
+            // Check if sentiment model file exists
+            File modelFile = new File(modelsDir + "/sentiment_model.pkl");
+            if (!modelFile.exists()) {
+                System.out.println("❌ Sentiment model file not found: " + modelFile.getAbsolutePath());
                 tempFile.delete();
                 return null;
             }
@@ -165,30 +121,48 @@ public class AIToolsService {
             processBuilder.directory(new File(modelsDir));
             processBuilder.redirectErrorStream(true);
 
+            System.out.println("🐍 Starting Python sentiment process...");
             Process process = processBuilder.start();
 
+            // Read output and look for JSON line
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             String jsonOutput = null;
             String line;
 
+            System.out.println("🐍 Python output:");
             while ((line = reader.readLine()) != null) {
+                System.out.println("   " + line);
+                // Look for lines that start with { (JSON)
                 if (line.trim().startsWith("{")) {
                     jsonOutput = line.trim();
-                    break;
+                    System.out.println("✅ Found sentiment JSON output: " + jsonOutput);
                 }
             }
 
             int exitCode = process.waitFor();
+            System.out.println("🐍 Python exit code: " + exitCode);
+
+            // Clean up temp file
             tempFile.delete();
 
             if (exitCode != 0 || jsonOutput == null) {
+                System.out.println("❌ Python sentiment script failed with exit code: " + exitCode);
                 return null;
             }
 
-            return gson.fromJson(jsonOutput, Map.class);
+            try {
+                Map<String, Object> result = gson.fromJson(jsonOutput, Map.class);
+                System.out.println("✅ Successfully parsed sentiment Python response");
+                return result;
+            } catch (Exception e) {
+                System.out.println("❌ Failed to parse JSON from Python: " + e.getMessage());
+                System.out.println("🐍 Raw output was: " + jsonOutput);
+                return null;
+            }
 
         } catch (Exception e) {
             System.out.println("❌ Error calling Python sentiment model: " + e.getMessage());
+            e.printStackTrace();
             return null;
         }
     }

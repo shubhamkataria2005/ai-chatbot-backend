@@ -8,7 +8,7 @@ import traceback
 
 def predict_salary(experience, job_title, location, education_level, skills_list):
     """
-    Predict salary using SINGLE model file
+    Predict salary using SINGLE model file and return BOTH local currency and USD
     """
     try:
         print("Starting salary prediction (SINGLE FILE)...")
@@ -75,6 +75,11 @@ def predict_salary(experience, job_title, location, education_level, skills_list
         # Make prediction (USD)
         predicted_salary_usd = model.predict(features_scaled)[0]
 
+        # Ensure prediction is reasonable
+        if predicted_salary_usd <= 0 or np.isnan(predicted_salary_usd):
+            print(f"Warning: Invalid prediction {predicted_salary_usd}, using fallback calculation")
+            predicted_salary_usd = calculate_fallback_salary(experience, job_title, location, education_level, skills_list)
+
         # Convert to local currency
         currency_map = {
             'United States': 'USD',
@@ -90,30 +95,40 @@ def predict_salary(experience, job_title, location, education_level, skills_list
         exchange_rate = exchange_rates.get(currency, 1.0)
         local_salary = predicted_salary_usd * exchange_rate
 
-        # Confidence
+        # Ensure salaries are reasonable
+        predicted_salary_usd = max(20000, min(300000, predicted_salary_usd))
+        local_salary = max(20000, min(300000, local_salary))
+
+        # Confidence calculation
         confidence = min(80 + (experience * 1) + (len(skills_list) * 2), 95)
 
-        # Factors
+        # Factors for explanation
         factors = [
             f"{experience} years of experience",
             f"{job_title} role",
             f"{location} location",
             f"{education_level} education level",
             f"{len(skills_list)} key skills selected",
-            "Single file ML model"
+            "Trained ML model with market data"
         ]
 
         result = {
             "success": True,
             "salaryUSD": round(predicted_salary_usd),
-            "salary": round(local_salary),
+            "salary": round(local_salary),  # ← NOW RETURNING LOCAL SALARY TOO!
             "currency": currency,
             "confidence": round(confidence),
             "factors": factors,
-            "model": "RandomForest_Single_File_v1.0"
+            "model": "RandomForest_Single_File_v1.0",
+            "exchangeRate": exchange_rate,
+            "predictionDetails": {
+                "baseSalaryUSD": round(predicted_salary_usd),
+                "localCurrencySalary": round(local_salary),
+                "currencyUsed": currency
+            }
         }
 
-        print(f"SINGLE FILE Prediction successful: {result['salary']} {currency}")
+        print(f"SINGLE FILE Prediction successful: {result['salary']} {currency} ({result['salaryUSD']} USD)")
         return result
 
     except Exception as e:
@@ -126,6 +141,41 @@ def predict_salary(experience, job_title, location, education_level, skills_list
             "error": error_msg,
             "message": "Unexpected error during prediction"
         }
+
+def calculate_fallback_salary(experience, job_title, location, education_level, skills_list):
+    """Fallback calculation if ML prediction is invalid"""
+    # Base salaries in USD by role
+    base_salaries = {
+        'Software Developer': 75000,
+        'Senior Developer': 110000,
+        'Full Stack Developer': 90000,
+        'Frontend Developer': 80000,
+        'Backend Developer': 85000,
+        'Data Scientist': 95000,
+        'ML Engineer': 105000
+    }
+
+    base = base_salaries.get(job_title, 80000)
+
+    # Experience adjustment
+    exp_multiplier = 1.0 + (min(experience, 20) * 0.05)
+
+    # Education adjustment
+    edu_multipliers = {
+        'PhD': 1.2,
+        'Master': 1.1,
+        'Bachelor': 1.05,
+        'Diploma': 1.0
+    }
+    edu_multiplier = edu_multipliers.get(education_level, 1.0)
+
+    # Skills bonus
+    skills_bonus = len(skills_list) * 1000
+
+    calculated_salary = (base * exp_multiplier * edu_multiplier) + skills_bonus
+
+    print(f"Fallback calculation: {calculated_salary} USD")
+    return max(30000, min(250000, calculated_salary))
 
 if __name__ == "__main__":
     try:

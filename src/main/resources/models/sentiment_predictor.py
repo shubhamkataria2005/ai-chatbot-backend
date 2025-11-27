@@ -10,7 +10,7 @@ import os
 
 def predict_sentiment(text):
     """
-    Predict sentiment using your trained model
+    Predict sentiment using your trained model with enhanced error handling
     """
     try:
         print(f"Sentiment Analysis for: {text}")
@@ -28,6 +28,7 @@ def predict_sentiment(text):
             return {"success": False, "error": error_msg}
 
         # Load model components
+        print("Loading model components...")
         components = joblib.load(model_path)
         classifier = components['classifier']
         cv = components['count_vectorizer']
@@ -36,12 +37,22 @@ def predict_sentiment(text):
 
         print("Model loaded successfully")
 
+        # Download required NLTK data if not present
+        try:
+            nltk.data.find('corpora/stopwords')
+        except LookupError:
+            print("Downloading NLTK stopwords...")
+            nltk.download('stopwords', quiet=True)
+
         # Preprocess text (same as your training)
         review = re.sub('[^a-zA-Z]', ' ', text)
         review = review.lower()
         review = review.split()
+
+        # Get stopwords
         all_stopwords = stopwords.words('english')
         all_stopwords.remove('not')
+
         review = [ps.stem(word) for word in review if not word in set(all_stopwords)]
         review = ' '.join(review)
 
